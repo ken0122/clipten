@@ -17,6 +17,8 @@
 
 ### 直接安装（推荐）
 
+当前预编译安装包适用于 Apple Silicon（M 系列芯片）Mac，要求 macOS 13 或更高版本；Intel Mac 请从源码构建。
+
 1. 打开项目的 [Releases 页面](https://github.com/ken0122/clipten/releases/latest)。
 2. 在 **Assets** 中下载 `ClipTen-macOS.zip`。
 3. 解压后，将 `ClipTen.app` 拖入 macOS 的“应用程序”文件夹。
