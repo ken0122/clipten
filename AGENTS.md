@@ -27,6 +27,8 @@
 
 表中省略目录的 Swift 文件均位于 `Sources/ClipTen/`。
 
+构建入口为 `Package.swift`（Swift tools 6.0）和 `scripts/build-app.sh`。macOS 13 是应用部署目标，不代表任意 macOS 13 上的 Command Line Tools 都能编译当前源码；先检查 `swift --version`。
+
 ## 数据安全：不可回退的约束
 
 1. **不改 Bundle Identifier / 偏好设置域**：固定为 `local.luokun.ClipTen`。应用自身使用 `UserDefaults.standard`；不要使用与当前 Bundle Identifier 同名的 suite 初始化应用存储。
@@ -59,6 +61,8 @@ codesign --verify --deep --strict dist/ClipTen.app
 - 所有自动测试使用临时目录、独立偏好设置域与命名剪贴板。不得把测试改为 `.general`。
 - volatile UserDefaults 域只遮盖读取，**不会隔离写入**。真实 `.app` 初始化探针必须预置临时索引和进程内迁移标记，避免向正式域重复写标记。
 - 保留升级、清空重启、图片原字节、容量去重、稳定 ID、IO 失败、索引损坏、缺失图片、菜单重开和真实 `.app` 初始化回归。
+- 启动相关改动还须覆盖慢速历史/缩略图恢复期间的新复制，以及恢复前已打开菜单在完成后的状态；只在 `waitUntilIdle()` 后开始复制或打开菜单，不能验证这两个边界。当前缺口见 `DESIGN.md`。
+- 审查时区分产品约束与实现事实；如功能缺口未修复，文档须明确标记，不因现有测试通过便写成已实现。复现使用临时夹具，不能依赖真实用户历史。
 - 跨应用实测与真实按键/视觉验收按 `TESTING.md` 隔离流程执行。构建通过、处理函数测试或进程存活不等于真实粘贴验收。
 - 仅在获得安装授权后替换 `/Applications/ClipTen.app`：先退出旧实例，备份旧应用和数据，启动后核对迁移内容及顺序。不要为发布而无授权地再次替换用户的验证实例。
 

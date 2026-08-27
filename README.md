@@ -40,7 +40,7 @@
 
 ### 从源码构建
 
-需要 macOS 13 或更高版本，以及 Xcode Command Line Tools。
+需要提供 **Swift 6.0 或更高版本**的 Xcode / Command Line Tools（可用 `swift --version` 检查）。开发机系统还需满足所选工具链的要求；应用本身的最低运行系统仍为 macOS 13。
 
 ```bash
 git clone https://github.com/ken0122/clipten.git ClipTen
@@ -62,7 +62,7 @@ open /Applications/ClipTen.app
 
 更新时只替换应用，不要使用删除应用数据的卸载/清理工具，也不要删除上述目录或 ClipTen 偏好设置。更换 macOS 用户或电脑不会自动转移历史。恢复存储故障前应先退出并备份整个数据目录；恢复有效索引及其图片后重启，勿单独删除索引“重置”。
 
-启动只恢复历史，不把当时的系统剪贴板重新插入列表，空历史和首次启动也如此，避免清空后重启又恢复旧内容。启动后的新复制正常去重并保留最近 10 条；主动“清空记录”会删除历史。
+启动只恢复历史，不把当时的系统剪贴板重新插入列表，空历史和首次启动也如此，避免清空后重启又恢复旧内容。监控开始后的新复制正常去重并保留最近 10 条；主动“清空记录”会删除历史。
 
 ## 使用
 
@@ -83,6 +83,12 @@ open /Applications/ClipTen.app
 
 记录只保存在本机，不进行网络通信；文件没有额外加密，请勿把应用当作密码保险箱。最多十张上限图片约占 200 MB 原始文件空间，写入失败可能暂留未引用文件，后续成功提交或重启会清理。
 
+### 当前采集与启动限制
+
+- 剪贴板通过约 0.6 秒一次的轮询读取，不保证保留快速连续复制的每个中间状态。
+- 当前实现待历史和图片缩略图恢复完成后才记录剪贴板基线、启动监控；恢复期间的新复制可能被当作基线而漏记。此启动边界尚待修复。
+- 若恢复期间再次打开应用，已经展开的菜单可能停留在“正在恢复历史…”。恢复完成后关闭并重新打开菜单可刷新；展开菜单随异步恢复自动更新尚待修复。
+
 ## 开发与升级兼容性
 
 项目开发、测试隔离与发布约定见 [AGENTS.md](AGENTS.md)。Release 同时提供 `SHA256SUMS`，可在下载目录用 `shasum -a 256 -c SHA256SUMS` 校验安装包完整性。
@@ -90,7 +96,7 @@ open /Applications/ClipTen.app
 - Bundle Identifier 与偏好设置域固定为 `local.luokun.ClipTen`。旧键 `clipboardHistory` 为字符串数组备份，`clipboardHistoryFormatVersion = 2` 为迁移标记；新索引包含 `schemaVersion: 2`、稳定条目 ID 和清空备份标记。
 - 新图片先原子写入文件，再原子提交索引，提交成功后才删除被淘汰的图片。磁盘写入失败保留此前已提交的历史；损坏或不一致的索引进入只读保护。只处理应用数据目录内受验证的文件名，不跟随图片符号链接。
 - 升级只替换应用包，禁止在安装、启动或更新流程中清空用户偏好设置。未来如更换格式或存储位置，必须先验证旧数据迁移成功，再切换写入；不能用空列表覆盖未成功读取的数据。
-- 每次更新运行 `swift test` 和 `./scripts/build-app.sh`。移动项目后若旧构建缓存失效，可用 `swift test --scratch-path work/image-build` 及 `CLIPTEN_BUILD_DIR="$PWD/work/image-build" ./scripts/build-app.sh "$PWD/work/image-dist"`。
+- 每次更新运行 `swift test`、`swift test -c release`、`./scripts/build-app.sh` 和 `codesign --verify --deep --strict dist/ClipTen.app`。移动项目后若旧构建缓存失效，可用 `swift test --scratch-path work/image-build`、`swift test -c release --scratch-path work/image-build` 及 `CLIPTEN_BUILD_DIR="$PWD/work/image-build" ./scripts/build-app.sh "$PWD/work/image-dist"`。
 - 自动测试使用临时目录、独立偏好设置域和独立剪贴板，覆盖原始字节恢复、透明图、混合十条、稳定 ID、异步顺序、清空失效、升级与磁盘故障。另有真实 `.app` 包标识内的默认初始化测试，以进程内样本和预置临时索引验证，不写正式偏好设置。
 - 跨应用实测应优先使用测试账户；若在日常账户验证，先暂停正式实例，完整保存系统剪贴板的全部条目和类型（任何类型读取失败就取消），使用隔离存储实例，结束后先恢复并校验剪贴板，再恢复正式实例，避免测试数据进入用户历史。原生菜单、真实快捷键和目标应用粘贴仍需人工验收，不能用构建通过代替。详见 [测试说明](TESTING.md)。
 
