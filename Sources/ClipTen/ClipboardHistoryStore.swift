@@ -2,6 +2,10 @@ import Foundation
 
 final class ClipboardHistoryStore {
     static let defaultCapacity = 10
+    // Released in v1.0.0. Keep these stable across app renames and upgrades.
+    // A future format change must migrate existing data before writing it.
+    static let persistenceDomain = "local.luokun.ClipTen"
+    static let historyKey = "clipboardHistory"
 
     private let defaults: UserDefaults
     private let storageKey: String
@@ -10,8 +14,11 @@ final class ClipboardHistoryStore {
     private(set) var entries: [String]
 
     init(
+        // The app's own bundle domain must use .standard. Creating a suite
+        // with the current bundle identifier can return nil in a packaged app.
+        // UpgradePersistenceTests pins Info.plist to the released domain.
         defaults: UserDefaults = .standard,
-        storageKey: String = "clipboardHistory",
+        storageKey: String = ClipboardHistoryStore.historyKey,
         capacity: Int = ClipboardHistoryStore.defaultCapacity
     ) {
         self.defaults = defaults

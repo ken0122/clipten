@@ -14,6 +14,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let historyStore: ClipboardHistoryStore
     private let pasteboard: NSPasteboard
     private let menu = NSMenu()
+    private let historyMenuPresenter: (@MainActor (NSMenu) -> Void)?
+    private var isHistoryMenuPresentationPending = false
 
     private var statusItem: NSStatusItem?
     private var clipboardTimer: Timer?
@@ -27,10 +29,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     init(
         historyStore: ClipboardHistoryStore = ClipboardHistoryStore(),
-        pasteboard: NSPasteboard = .general
+        pasteboard: NSPasteboard = .general,
+        historyMenuPresenter: (@MainActor (NSMenu) -> Void)? = nil
     ) {
         self.historyStore = historyStore
         self.pasteboard = pasteboard
+        self.historyMenuPresenter = historyMenuPresenter
         super.init()
     }
 
@@ -39,8 +43,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         configureStatusItem()
         registeredGlobalShortcutSlots = globalShortcutManager.register()
 
-        lastPasteboardChangeCount = pasteboard.changeCount
-        captureCurrentClipboard()
+        prepareClipboardMonitoring()
 
         clipboardTimer = Timer.scheduledTimer(
             timeInterval: 0.6,
@@ -50,6 +53,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             repeats: true
         )
         clipboardTimer?.tolerance = 0.15
+        requestHistoryMenu()
+    }
+
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        requestHistoryMenu()
+        return false
+    }
+
+    func requestHistoryMenu() {
+        // Coalesce launch/reopen events and avoid nesting menu tracking loops.
+        guard !isHistoryMenuPresentationPending else { return }
+        isHistoryMenuPresentationPending = true
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            defer { self.isHistoryMenuPresentationPending = false }
+            self.rebuildMenu()
+            if let presenter = self.historyMenuPresenter {
+                presenter(self.menu)
+            } else {
+                NSApp.activate(ignoringOtherApps: true)
+                // A screen-space popup works even when the status item is hidden
+                // behind the notch. AppKit keeps it within the screen bounds.
+                self.menu.popUp(positioning: nil, at: NSEvent.mouseLocation, in: nil)
+            }
+        }
     }
 
     func applicationWillTerminate(_ notification: Notification) {
@@ -139,7 +167,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(quitItem)
     }
 
-    @objc private func checkClipboard() {
+    func prepareClipboardMonitoring() {
+        lastPasteboardChangeCount = pasteboard.changeCount
+        // Restarting/upgrading must not reorder or evict restored history.
+        // Only a fresh history captures the clipboard immediately.
+        if historyStore.entries.isEmpty {
+            captureCurrentClipboard()
+        }
+    }
+
+    @objc func checkClipboard() {
         guard pasteboard.changeCount != lastPasteboardChangeCount else { return }
         lastPasteboardChangeCount = pasteboard.changeCount
         captureCurrentClipboard()
