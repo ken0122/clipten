@@ -1,0 +1,22 @@
+name: Verify
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test-and-build:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test history and upgrade compatibility
+        run: swift test
+      - name: Build application
+        run: ./scripts/build-app.sh
+      - name: Verify package identity and signature
+        run: |
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' dist/ClipTen.app/Contents/Info.plist)" = 'local.luokun.ClipTen'
+          codesign --verify --deep --strict dist/ClipTen.app
