@@ -1,9 +1,20 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-08-27T02:18:29Z",
+  "generatedAt": "2026-08-27T02:34:09Z",
   "title": "Design System: ClipTen",
   "extensions": {
-    "colorMeta": {},
+    "colorMeta": {
+      "launcher-indigo": {
+        "role": "primary",
+        "displayName": "Launcher Indigo",
+        "canonical": "calibrated RGB (0.22, 0.29, 0.94, 1.0)"
+      },
+      "launcher-glyph": {
+        "role": "neutral",
+        "displayName": "Launcher Glyph White",
+        "canonical": "#FFFFFF"
+      }
+    },
     "typographyMeta": {},
     "shadows": [],
     "motion": [
@@ -18,10 +29,10 @@
   "components": [],
   "narrative": {
     "northStar": "The Native Memory Slip",
-    "overview": "ClipTen 像一张随手可取的系统记忆便签：它栖身于菜单栏，只在用户主动点开时展开，不占 Dock、不制造独立窗口，也不把短暂的剪贴板动作包装成复杂工作流。视觉表达完全服从 macOS 原生菜单，让应用看起来像系统本来就有的一项能力。\n\n界面密度紧凑但不拥挤。层级来自系统菜单的排版、分隔线、禁用态和键盘快捷键列；内容本身是主角，品牌装饰保持隐形。深色、浅色、高对比度、键盘导航和 VoiceOver 表现均交由 AppKit 的动态语义与系统行为处理。",
+    "overview": "ClipTen 像一张随手可取的系统记忆便签：它栖身于菜单栏，只在用户主动点开时展开，不占 Dock、不制造独立窗口，也不把短暂的剪贴板动作包装成复杂工作流。视觉表达完全服从 macOS 原生菜单，让应用看起来像系统本来就有的一项能力。\n\n界面密度紧凑但不拥挤。层级来自系统菜单的排版、分隔线、禁用态和键盘快捷键列；内容本身是主角，品牌装饰保持隐形。深色、浅色、高对比度、键盘导航和 VoiceOver 表现均交由 AppKit 的动态语义与系统行为处理。唯一的固定色彩只属于 Launcher 图标，不进入菜单界面。",
     "keyCharacteristics": [
       "单一菜单栏入口，无独立主窗口。",
-      "原生菜单材质、系统字体与动态语义颜色。",
+      "原生菜单材质、系统字体与动态语义颜色；Launcher 与状态栏共享同一枚原创剪贴板历史字形。",
       "最近记录先于管理命令，十条上限始终清晰可扫读。",
       "反馈短促且克制，不中断当前应用。"
     ],
@@ -58,7 +69,8 @@
       }
     ],
     "dos": [
-      "Do 使用原生 `NSMenu`、`NSMenuItem`、系统分隔线和 SF Symbols 模板图标扩展现有界面。",
+      "Do 使用原生 `NSMenu`、`NSMenuItem`、系统分隔线，并让状态栏继续使用共享原创字形的模板图；SF Symbols 只用于短暂的成功 `checkmark`。",
+      "Do 通过图标生成器与 `scripts/build-app.sh` 重建 Launcher 资源，确保所有标准尺寸来自同一绘制源。",
       "Do 保持“标题 → 历史 → 工具命令”的固定阅读顺序。",
       "Do 让完整文本继续通过工具提示和可访问名称可用，即使可见预览被截断。",
       "Do 将反馈限制为菜单栏图标的短暂状态变化。"
@@ -67,7 +79,8 @@
       "Don't 添加独立窗口、Dock 界面、卡片面板或自绘菜单。",
       "Don't 固定浅色或深色颜色，也不要覆盖系统字体、圆角、阴影和选中态。",
       "Don't 用多行正文撑高菜单项，或让历史记录超过十条。",
-      "Don't 为复制成功增加通知、声音、模态确认或焦点切换。"
+      "Don't 为复制成功增加通知、声音、模态确认或焦点切换。",
+      "Don't 把 Launcher 的固定靛蓝、白色字形、圆角容器或投影应用到状态栏模板图。"
     ]
   }
 }

@@ -1,4 +1,5 @@
 import AppKit
+import ClipTenDesign
 import XCTest
 @testable import ClipTen
 
@@ -73,5 +74,12 @@ final class ClipboardHistoryStoreTests: XCTestCase {
 
         XCTAssertEqual(pasteboard.string(forType: .string), "selected clipboard text")
         XCTAssertEqual(store.entries.first, "selected clipboard text")
+    }
+
+    func testStatusIconIsAnEighteenPointTemplateImage() {
+        let image = ClipTenIcon.statusImage()
+
+        XCTAssertEqual(image.size, NSSize(width: 18, height: 18))
+        XCTAssertTrue(image.isTemplate)
     }
 }

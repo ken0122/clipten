@@ -7,6 +7,7 @@
  */
 
 import AppKit
+import ClipTenDesign
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
@@ -51,7 +52,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private func configureStatusItem() {
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
-        item.button?.image = statusImage(named: "doc.on.clipboard")
+        item.button?.image = ClipTenIcon.statusImage()
         item.button?.toolTip = "ClipTen · 最近 10 条剪贴板"
         item.menu = menu
 
@@ -147,7 +148,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         statusItem?.button?.image = statusImage(named: "checkmark")
 
         let workItem = DispatchWorkItem { [weak self] in
-            self?.statusItem?.button?.image = self?.statusImage(named: "doc.on.clipboard")
+            self?.statusItem?.button?.image = ClipTenIcon.statusImage()
         }
         feedbackWorkItem = workItem
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.8, execute: workItem)
