@@ -23,11 +23,14 @@ final class PackagedDefaultsTests: XCTestCase {
 
         try run("/usr/bin/xcrun", arguments: [
             "swiftc", "-O",
+            root.appendingPathComponent("Sources/ClipTen/ClipboardEntry.swift").path,
+            root.appendingPathComponent("Sources/ClipTen/ClipboardImageProcessor.swift").path,
+            root.appendingPathComponent("Sources/ClipTen/HistoryDisk.swift").path,
             root.appendingPathComponent("Sources/ClipTen/ClipboardHistoryStore.swift").path,
             root.appendingPathComponent("Tests/Fixtures/PackagedDefaultsProbe/main.swift").path,
             "-o", executable.path
         ])
-        try run(executable.path, arguments: [])
+        try run(executable.path, arguments: [temporary.appendingPathComponent("isolated-data").path])
     }
 
     private func run(_ executable: String, arguments: [String]) throws {

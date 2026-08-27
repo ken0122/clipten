@@ -21,7 +21,7 @@
       {
         "name": "copy-confirmation",
         "value": "0.8s",
-        "purpose": "Keep the checkmark visible briefly after a history item restores its text to the clipboard."
+        "purpose": "Keep the checkmark visible briefly after a text or original image is restored and promoted successfully."
       }
     ],
     "breakpoints": []
@@ -33,8 +33,8 @@
     "keyCharacteristics": [
       "单一原生菜单界面，无独立主窗口；首次启动或再次打开应用会在鼠标附近显示历史，作为菜单栏图标被挤掉时的入口；全局 Control + Shift + 数字（三键）无需展开菜单即可复制历史。",
       "原生菜单材质、系统字体与动态语义颜色；Launcher 与状态栏共享同一枚原创剪贴板历史字形。",
-      "最近记录先于管理命令，十条上限始终清晰可扫读。",
-      "反馈短促且克制，不中断当前应用。"
+      "文字与静态 PNG/TIFF 合计十条，图片行显示等比缩略图与尺寸，仍使用原生菜单和数字快捷键列。",
+      "成功短暂显示勾号；超限、损坏、存储和文件错误通过菜单短句与警告图标反馈，不中断当前应用。"
     ],
     "rules": [
       {
@@ -64,16 +64,16 @@
       },
       {
         "name": "The One-Click Return Rule",
-        "body": "从打开菜单到恢复任一历史文本只需要一次菜单项选择，不添加确认、详情页或二级动作。",
+        "body": "从打开菜单到恢复任一可用的历史文本或图片只需要一次菜单项选择，不添加确认、详情页或二级动作。",
         "section": "components"
       }
     ],
     "dos": [
-      "Do 使用原生 `NSMenu`、`NSMenuItem`、系统分隔线，并让状态栏继续使用共享原创字形的模板图；SF Symbols 只用于短暂的成功 `checkmark`。",
+      "Do 使用原生 `NSMenu`、`NSMenuItem`、系统分隔线，并让状态栏继续使用共享原创字形的模板图；SF Symbols 用于成功 `checkmark` 与错误 `exclamationmark.triangle`。",
       "Do 通过图标生成器与 `scripts/build-app.sh` 重建 Launcher 资源，确保所有标准尺寸来自同一绘制源。",
       "Do 保持“标题 → 历史 → 工具命令”的固定阅读顺序。",
       "Do 让完整文本继续通过工具提示和可访问名称可用，即使可见预览被截断。",
-      "Do 将反馈限制为菜单栏图标的短暂状态变化。",
+      "Do 将成功反馈限制为图标短暂变化；错误通过菜单短句与图标说明。图片仅缓存最长边 48 像素的缩略图，显示为最长边 24 点。",
       "Do 只显示注册成功的全局快捷键；注册失败以禁用的原生菜单提示呈现，并保留点选复制。"
     ],
     "donts": [

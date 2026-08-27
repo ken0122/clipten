@@ -2,6 +2,7 @@
 .swiftpm/
 .DS_Store
 outputs/
+dist/
 work/
 *.xcuserstate
 xcuserdata/

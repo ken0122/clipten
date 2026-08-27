@@ -1,5 +1,5 @@
 /*
- THESIS: Ten recent clipboard texts live where the task begins: the menu bar, never in a dashboard or floating window.
+ THESIS: Ten recent clipboard texts and images live in one native menu, without a dashboard or floating window.
  OWN-WORLD: Native macOS menu materials, system typography, one template clipboard symbol, and familiar separators and commands.
  STORY: Copy normally, open the menu when something is needed again, then choose the remembered text to copy it back.
  FIRST VIEWPORT: A compact native menu headed “最近复制”, followed immediately by up to ten readable previews and two utility commands.
@@ -11,7 +11,7 @@ import ClipTenDesign
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
-    private let historyStore: ClipboardHistoryStore
+    let history: HistoryController
     private let pasteboard: NSPasteboard
     private let menu = NSMenu()
     private let historyMenuPresenter: (@MainActor (NSMenu) -> Void)?
@@ -28,14 +28,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     init(
-        historyStore: ClipboardHistoryStore = ClipboardHistoryStore(),
+        historyStore: ClipboardHistoryStore? = nil,
         pasteboard: NSPasteboard = .general,
         historyMenuPresenter: (@MainActor (NSMenu) -> Void)? = nil
     ) {
-        self.historyStore = historyStore
+        self.history = HistoryController(store: historyStore)
         self.pasteboard = pasteboard
         self.historyMenuPresenter = historyMenuPresenter
         super.init()
+        menu.autoenablesItems = false
+        history.onChange = { [weak self] in self?.updateStatusFeedback() }
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -43,17 +45,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         configureStatusItem()
         registeredGlobalShortcutSlots = globalShortcutManager.register()
 
-        prepareClipboardMonitoring()
-
-        clipboardTimer = Timer.scheduledTimer(
-            timeInterval: 0.6,
-            target: self,
-            selector: #selector(checkClipboard),
-            userInfo: nil,
-            repeats: true
-        )
-        clipboardTimer?.tolerance = 0.15
-        requestHistoryMenu()
+        history.whenReady { [weak self] in
+            guard let self else { return }
+            self.prepareClipboardMonitoring()
+            self.clipboardTimer = Timer.scheduledTimer(
+                timeInterval: 0.6, target: self, selector: #selector(self.checkClipboard),
+                userInfo: nil, repeats: true
+            )
+            self.clipboardTimer?.tolerance = 0.15
+            self.requestHistoryMenu()
+        }
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
@@ -99,7 +100,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         rebuildMenu()
     }
 
-    private func rebuildMenu() {
+    func rebuildMenu() {
         menu.removeAllItems()
 
         let heading = NSMenuItem(title: "最近复制", action: nil, keyEquivalent: "")
@@ -107,14 +108,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(heading)
         menu.addItem(.separator())
 
-        if historyStore.entries.isEmpty {
-            let emptyItem = NSMenuItem(title: "还没有剪贴板记录", action: nil, keyEquivalent: "")
+        if history.entries.isEmpty {
+            let title = history.isLoading ? "正在恢复历史…"
+                : (history.isReadOnly ? "历史暂不可用，请检查存储" : "还没有剪贴板记录")
+            let emptyItem = NSMenuItem(title: title, action: nil, keyEquivalent: "")
             emptyItem.isEnabled = false
             menu.addItem(emptyItem)
         } else {
-            for (index, text) in historyStore.entries.enumerated() {
+            for (index, entry) in history.entries.enumerated() {
+                let title: String
+                switch entry.content {
+                case .text(let text): title = preview(for: text)
+                case .image(let image):
+                    title = "图片 · \(image.width)×\(image.height)" + (history.unavailable.contains(entry.id) ? "（不可用）" : "")
+                }
                 let item = NSMenuItem(
-                    title: preview(for: text),
+                    title: title,
                     action: #selector(copyHistoryItem(_:)),
                     keyEquivalent: registeredGlobalShortcutSlots.contains(index)
                         ? (index < 9 ? String(index + 1) : "0")
@@ -122,13 +131,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 )
                 item.keyEquivalentModifierMask = [.control, .shift]
                 item.target = self
-                item.representedObject = text
-                item.toolTip = text
-                item.setAccessibilityLabel("复制：\(preview(for: text, limit: 140))")
+                item.representedObject = entry.id
+                item.isEnabled = !history.isClearing && !history.unavailable.contains(entry.id)
+                item.toolTip = entry.text ?? title
+                item.image = history.thumbnails[entry.id]
+                item.setAccessibilityLabel("复制：\(entry.text.map { preview(for: $0, limit: 140) } ?? title)")
                 menu.addItem(item)
             }
 
-            let unavailableSlots = Set(0..<min(historyStore.entries.count, 10))
+            let unavailableSlots = Set(0..<min(history.entries.count, 10))
                 .subtracting(registeredGlobalShortcutSlots)
                 .sorted()
             if !unavailableSlots.isEmpty {
@@ -148,13 +159,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         menu.addItem(.separator())
 
+        if let issue = history.issue {
+            let warning = NSMenuItem(title: issue.localizedDescription, action: nil, keyEquivalent: "")
+            warning.isEnabled = false
+            menu.addItem(warning)
+            menu.addItem(.separator())
+        } else if !history.unavailable.isEmpty {
+            let warning = NSMenuItem(title: "部分图片不可用，其他记录仍保留", action: nil, keyEquivalent: "")
+            warning.isEnabled = false
+            menu.addItem(warning)
+            menu.addItem(.separator())
+        }
+
         let clearItem = NSMenuItem(
             title: "清空记录",
             action: #selector(clearHistory),
             keyEquivalent: ""
         )
         clearItem.target = self
-        clearItem.isEnabled = !historyStore.entries.isEmpty
+        clearItem.isEnabled = !history.entries.isEmpty && !history.isLoading && !history.isReadOnly && !history.isClearing
         menu.addItem(clearItem)
 
         let quitItem = NSMenuItem(
@@ -169,45 +192,47 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     func prepareClipboardMonitoring() {
         lastPasteboardChangeCount = pasteboard.changeCount
-        // Restarting/upgrading must not reorder or evict restored history.
-        // Only a fresh history captures the clipboard immediately.
-        if historyStore.entries.isEmpty {
-            captureCurrentClipboard()
-        }
+        // Startup only restores history, even when empty: recapturing here would
+        // resurrect the last clipboard value after the user clears and restarts.
     }
 
     @objc func checkClipboard() {
+        guard history.canCapture else { return }
         guard pasteboard.changeCount != lastPasteboardChangeCount else { return }
-        lastPasteboardChangeCount = pasteboard.changeCount
         captureCurrentClipboard()
     }
 
     private func captureCurrentClipboard() {
-        guard let text = pasteboard.string(forType: .string) else { return }
-        _ = historyStore.add(text)
+        guard history.canCapture else { return }
+        let changeCount = pasteboard.changeCount
+        let capture = ClipboardCaptureReader.read(pasteboard)
+        // The pasteboard may change while fetching representations from another app.
+        guard changeCount == pasteboard.changeCount else { return }
+        lastPasteboardChangeCount = changeCount
+        if let capture { history.capture(capture) }
     }
 
     @objc func copyHistoryItem(_ sender: NSMenuItem) {
-        guard let text = sender.representedObject as? String else { return }
-        copy(text)
+        guard let id = sender.representedObject as? UUID else { return }
+        copy(id)
     }
 
     func copyHistoryEntry(at slot: Int) {
-        guard historyStore.entries.indices.contains(slot) else { return }
-        copy(historyStore.entries[slot])
+        guard history.entries.indices.contains(slot) else { return }
+        copy(history.entries[slot].id)
     }
 
-    private func copy(_ text: String) {
-        pasteboard.clearContents()
-        pasteboard.setString(text, forType: .string)
+    private func copy(_ id: UUID) {
+        history.copy(id: id, to: pasteboard, didWrite: { [weak self] count in
+            self?.lastPasteboardChangeCount = count
+        }) { [weak self] success in
+            if success { self?.showCopiedFeedback() }
+        }
+    }
+
+    @objc func clearHistory() {
         lastPasteboardChangeCount = pasteboard.changeCount
-        _ = historyStore.add(text)
-        showCopiedFeedback()
-    }
-
-    @objc private func clearHistory() {
-        historyStore.clear()
-        rebuildMenu()
+        history.clear()
     }
 
     @objc private func quitApplication() {
@@ -219,10 +244,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         statusItem?.button?.image = statusImage(named: "checkmark")
 
         let workItem = DispatchWorkItem { [weak self] in
-            self?.statusItem?.button?.image = ClipTenIcon.statusImage()
+            self?.updateStatusFeedback()
         }
         feedbackWorkItem = workItem
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.8, execute: workItem)
+    }
+
+    private func updateStatusFeedback() {
+        let message = history.issue?.localizedDescription
+            ?? (history.unavailable.isEmpty ? nil : "部分图片不可用，其他记录仍保留")
+        statusItem?.button?.image = message == nil ? ClipTenIcon.statusImage() : statusImage(named: "exclamationmark.triangle")
+        statusItem?.button?.toolTip = message ?? "ClipTen · 最近 10 条文字与图片"
     }
 
     private func statusImage(named symbolName: String) -> NSImage? {

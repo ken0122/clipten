@@ -5,81 +5,59 @@ import XCTest
 @testable import ClipTen
 
 final class ClipboardHistoryStoreTests: XCTestCase {
-    private var defaults: UserDefaults!
-    private var suiteName: String!
-
-    override func setUp() {
-        super.setUp()
-        suiteName = "ClipTenTests.\(UUID().uuidString)"
-        defaults = UserDefaults(suiteName: suiteName)
-        defaults.removePersistentDomain(forName: suiteName)
-    }
-
-    override func tearDown() {
-        defaults.removePersistentDomain(forName: suiteName)
-        defaults = nil
-        suiteName = nil
-        super.tearDown()
-    }
-
-    func testKeepsOnlyTenNewestEntries() {
-        let store = ClipboardHistoryStore(defaults: defaults)
-
-        for number in 1...12 {
-            store.add("item-\(number)")
-        }
-
+    func testKeepsOnlyTenNewestEntries() throws {
+        let fixture = try HistoryTestFixture()
+        let store = fixture.store()
+        for number in 1...12 { try store.add("item-\(number)") }
         XCTAssertEqual(store.entries.count, 10)
-        XCTAssertEqual(store.entries.first, "item-12")
-        XCTAssertEqual(store.entries.last, "item-3")
+        XCTAssertEqual(store.entries.first?.text, "item-12")
+        XCTAssertEqual(store.entries.last?.text, "item-3")
     }
 
-    func testDuplicateMovesToFrontWithoutGrowingHistory() {
-        let store = ClipboardHistoryStore(defaults: defaults)
-        store.add("first")
-        store.add("second")
-        store.add("first")
-
-        XCTAssertEqual(store.entries, ["first", "second"])
+    func testDuplicateMovesToFrontWithoutGrowingHistory() throws {
+        let fixture = try HistoryTestFixture()
+        let store = fixture.store()
+        try store.add("first")
+        let id = store.entries[0].id
+        try store.add("second")
+        try store.add("first")
+        XCTAssertEqual(store.entries.compactMap(\.text), ["first", "second"])
+        XCTAssertEqual(store.entries[0].id, id)
     }
 
-    func testIgnoresWhitespaceOnlyText() {
-        let store = ClipboardHistoryStore(defaults: defaults)
-
-        XCTAssertFalse(store.add("  \n\t "))
+    func testIgnoresWhitespaceOnlyText() throws {
+        let fixture = try HistoryTestFixture()
+        let store = fixture.store()
+        XCTAssertFalse(try store.add("  \n\t "))
         XCTAssertTrue(store.entries.isEmpty)
     }
 
-    func testPersistsAndClearsEntries() {
-        let firstStore = ClipboardHistoryStore(defaults: defaults)
-        firstStore.add("persisted")
-
-        let restoredStore = ClipboardHistoryStore(defaults: defaults)
-        XCTAssertEqual(restoredStore.entries, ["persisted"])
-
-        restoredStore.clear()
-        let emptyStore = ClipboardHistoryStore(defaults: defaults)
-        XCTAssertTrue(emptyStore.entries.isEmpty)
+    func testPersistsAndClearsEntries() throws {
+        let fixture = try HistoryTestFixture()
+        try fixture.store().add("persisted")
+        let restored = fixture.store()
+        XCTAssertEqual(restored.entries.compactMap(\.text), ["persisted"])
+        try restored.clear()
+        XCTAssertTrue(fixture.store().entries.isEmpty)
     }
 
     @MainActor
-    func testSelectingHistoryItemWritesItsTextToPasteboard() {
-        let pasteboard = NSPasteboard(name: .init("ClipTenTests.\(UUID().uuidString)"))
-        pasteboard.clearContents()
-        let store = ClipboardHistoryStore(defaults: defaults)
-        let delegate = AppDelegate(historyStore: store, pasteboard: pasteboard)
-        let menuItem = NSMenuItem(title: "preview", action: nil, keyEquivalent: "")
-        menuItem.representedObject = "selected clipboard text"
-
-        delegate.copyHistoryItem(menuItem)
-
-        XCTAssertEqual(pasteboard.string(forType: .string), "selected clipboard text")
-        XCTAssertEqual(store.entries.first, "selected clipboard text")
+    func testSelectingHistoryItemWritesItsTextToPasteboard() async throws {
+        let fixture = try HistoryTestFixture()
+        let store = fixture.store()
+        try store.add("selected clipboard text")
+        let delegate = AppDelegate(historyStore: store, pasteboard: fixture.pasteboard)
+        await delegate.history.waitUntilIdle()
+        let item = NSMenuItem(title: "preview", action: nil, keyEquivalent: "")
+        item.representedObject = delegate.history.entries[0].id
+        delegate.copyHistoryItem(item)
+        await delegate.history.waitUntilIdle()
+        XCTAssertEqual(fixture.pasteboard.string(forType: .string), "selected clipboard text")
+        XCTAssertEqual(delegate.history.entries.first?.text, "selected clipboard text")
     }
 
     func testStatusIconIsAnEighteenPointTemplateImage() {
         let image = ClipTenIcon.statusImage()
-
         XCTAssertEqual(image.size, NSSize(width: 18, height: 18))
         XCTAssertTrue(image.isTemplate)
     }
@@ -87,26 +65,23 @@ final class ClipboardHistoryStoreTests: XCTestCase {
     @MainActor
     func testGlobalShortcutsUseAllNumberKeysWithUncommonModifiers() {
         let definitions = GlobalShortcutManager.definitions
-        let modifierFlags = GlobalShortcutManager.modifierFlags
-
         XCTAssertEqual(definitions.map(\.slot), Array(0..<10))
         XCTAssertEqual(Set(definitions.map(\.keyCode)).count, 10)
-        XCTAssertEqual(modifierFlags, UInt32(controlKey | shiftKey))
-        XCTAssertEqual(modifierFlags & UInt32(cmdKey | optionKey), 0)
+        XCTAssertEqual(GlobalShortcutManager.modifierFlags, UInt32(controlKey | shiftKey))
+        XCTAssertEqual(GlobalShortcutManager.modifierFlags & UInt32(cmdKey | optionKey), 0)
     }
 
     @MainActor
-    func testGlobalShortcutSelectionCopiesWithoutOpeningMenu() {
-        let pasteboard = NSPasteboard(name: .init("ClipTenTests.\(UUID().uuidString)"))
-        pasteboard.clearContents()
-        let store = ClipboardHistoryStore(defaults: defaults)
-        store.add("older")
-        store.add("newest")
-        let delegate = AppDelegate(historyStore: store, pasteboard: pasteboard)
-
+    func testGlobalShortcutSelectionCopiesWithoutOpeningMenu() async throws {
+        let fixture = try HistoryTestFixture()
+        let store = fixture.store()
+        try store.add("older")
+        try store.add("newest")
+        let delegate = AppDelegate(historyStore: store, pasteboard: fixture.pasteboard)
+        await delegate.history.waitUntilIdle()
         delegate.copyHistoryEntry(at: 1)
-
-        XCTAssertEqual(pasteboard.string(forType: .string), "older")
-        XCTAssertEqual(store.entries.first, "older")
+        await delegate.history.waitUntilIdle()
+        XCTAssertEqual(fixture.pasteboard.string(forType: .string), "older")
+        XCTAssertEqual(delegate.history.entries.first?.text, "older")
     }
 }
