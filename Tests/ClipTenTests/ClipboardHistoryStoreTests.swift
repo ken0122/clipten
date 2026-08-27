@@ -1,4 +1,5 @@
 import AppKit
+import Carbon.HIToolbox
 import ClipTenDesign
 import XCTest
 @testable import ClipTen
@@ -81,5 +82,31 @@ final class ClipboardHistoryStoreTests: XCTestCase {
 
         XCTAssertEqual(image.size, NSSize(width: 18, height: 18))
         XCTAssertTrue(image.isTemplate)
+    }
+
+    @MainActor
+    func testGlobalShortcutsUseAllNumberKeysWithUncommonModifiers() {
+        let definitions = GlobalShortcutManager.definitions
+        let modifierFlags = GlobalShortcutManager.modifierFlags
+
+        XCTAssertEqual(definitions.map(\.slot), Array(0..<10))
+        XCTAssertEqual(Set(definitions.map(\.keyCode)).count, 10)
+        XCTAssertEqual(modifierFlags, UInt32(controlKey | shiftKey))
+        XCTAssertEqual(modifierFlags & UInt32(cmdKey | optionKey), 0)
+    }
+
+    @MainActor
+    func testGlobalShortcutSelectionCopiesWithoutOpeningMenu() {
+        let pasteboard = NSPasteboard(name: .init("ClipTenTests.\(UUID().uuidString)"))
+        pasteboard.clearContents()
+        let store = ClipboardHistoryStore(defaults: defaults)
+        store.add("older")
+        store.add("newest")
+        let delegate = AppDelegate(historyStore: store, pasteboard: pasteboard)
+
+        delegate.copyHistoryEntry(at: 1)
+
+        XCTAssertEqual(pasteboard.string(forType: .string), "older")
+        XCTAssertEqual(store.entries.first, "older")
     }
 }

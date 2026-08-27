@@ -19,6 +19,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var clipboardTimer: Timer?
     private var lastPasteboardChangeCount = 0
     private var feedbackWorkItem: DispatchWorkItem?
+    private var registeredGlobalShortcutSlots: Set<Int> = []
+
+    private lazy var globalShortcutManager = GlobalShortcutManager { [weak self] slot in
+        self?.copyHistoryEntry(at: slot)
+    }
 
     init(
         historyStore: ClipboardHistoryStore = ClipboardHistoryStore(),
@@ -32,6 +37,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
         configureStatusItem()
+        registeredGlobalShortcutSlots = globalShortcutManager.register()
 
         lastPasteboardChangeCount = pasteboard.changeCount
         captureCurrentClipboard()
@@ -48,6 +54,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     func applicationWillTerminate(_ notification: Notification) {
         clipboardTimer?.invalidate()
+        globalShortcutManager.unregister()
     }
 
     private func configureStatusItem() {
@@ -81,14 +88,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 let item = NSMenuItem(
                     title: preview(for: text),
                     action: #selector(copyHistoryItem(_:)),
-                    keyEquivalent: index < 9 ? String(index + 1) : "0"
+                    keyEquivalent: registeredGlobalShortcutSlots.contains(index)
+                        ? (index < 9 ? String(index + 1) : "0")
+                        : ""
                 )
-                item.keyEquivalentModifierMask = [.command]
+                item.keyEquivalentModifierMask = [.control, .shift]
                 item.target = self
                 item.representedObject = text
                 item.toolTip = text
                 item.setAccessibilityLabel("复制：\(preview(for: text, limit: 140))")
                 menu.addItem(item)
+            }
+
+            let unavailableSlots = Set(0..<min(historyStore.entries.count, 10))
+                .subtracting(registeredGlobalShortcutSlots)
+                .sorted()
+            if !unavailableSlots.isEmpty {
+                menu.addItem(.separator())
+                let unavailableKeys = unavailableSlots
+                    .map { $0 == 9 ? "0" : String($0 + 1) }
+                    .joined(separator: "、")
+                let warning = NSMenuItem(
+                    title: "快捷键不可用：\(unavailableKeys)",
+                    action: nil,
+                    keyEquivalent: ""
+                )
+                warning.isEnabled = false
+                menu.addItem(warning)
             }
         }
 
@@ -126,7 +152,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     @objc func copyHistoryItem(_ sender: NSMenuItem) {
         guard let text = sender.representedObject as? String else { return }
+        copy(text)
+    }
 
+    func copyHistoryEntry(at slot: Int) {
+        guard historyStore.entries.indices.contains(slot) else { return }
+        copy(historyStore.entries[slot])
+    }
+
+    private func copy(_ text: String) {
         pasteboard.clearContents()
         pasteboard.setString(text, forType: .string)
         lastPasteboardChangeCount = pasteboard.changeCount
